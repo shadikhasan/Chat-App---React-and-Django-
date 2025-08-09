@@ -1,0 +1,80 @@
+# --------------------
+# Python / Django
+# --------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environment
+venv/
+ENV/
+env/
+.venv/
+.env
+
+# Django specific
+*.log
+db.sqlite3
+media/
+staticfiles/
+
+# Migrations cache
+**/migrations/**/__pycache__/
+**/migrations/*.py[cod]
+# Keep init files in migrations
+!**/migrations/__init__.py
+
+# --------------------
+# Node / Frontend
+# --------------------
+node_modules/
+dist/
+build/
+.cache/
+.vite/
+*.local
+
+# Yarn / npm logs
+yarn-debug.log*
+yarn-error.log*
+npm-debug.log*
+pnpm-debug.log*
+
+# --------------------
+# Environment & Config
+# --------------------
+.env
+.env.local
+.env.*.local
+
+# --------------------
+# Docker
+# --------------------
+*.pid
+*.seed
+*.pid.lock
+docker-compose.override.yml
+
+# --------------------
+# IDE & OS junk
+# --------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# VSCode
+.vscode/
+.history/

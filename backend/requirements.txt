@@ -1,0 +1,14 @@
+Django>=4.2
+whitenoise
+gunicorn
+djangorestframework
+psycopg2
+celery>=5.3
+redis>=5.0 
+djangorestframework-simplejwt
+channels 
+channels-redis
+django-cors-headers
+daphne
+redis
+dotenv
