@@ -1,39 +1,30 @@
-# 💬 Chat App — React + Django
+# 💬 Chat App — React + Django (Channels)
 
-A real-time chat application built with **React (Vite)** on the frontend and **Django + Django Channels** on the backend.  
-Supports **one-to-one messaging**, **real-time updates** via WebSockets, and a clean modular architecture for scalability.
+A real-time WhatsApp‑style chat built with **React (Vite + TypeScript)** and **Django + DRF + Channels**.  
+Features **JWT auth**, **1:1 chat**, **presence (online/last seen)**, **typing**, and **message ticks**: ✓ sent, ✓✓ delivered, ✓✓ blue seen.  
+The sidebar (inbox) shows **last message + unread count** and updates **live** via WebSockets.
 
 ---
 
 ## 📌 Features
 
-- 🔑 **JWT Authentication** (Login & Signup)
-- 💬 **One-to-One Chat**
-- ⚡ **Real-Time Messaging** using Django Channels + WebSockets
-- 📜 **Message History** from the database
-- 🔔 **Live UI Updates** without page refresh
-- 🎨 **Modern UI** with TailwindCSS
-- 🐳 **Dockerized** for easy deployment
-- 🗄 **SQLite** for development (can be switched to PostgreSQL/MySQL in production)
+- 🔑 **JWT Authentication** (register, login, refresh, `/auth/me`)
+- 💬 **One‑to‑one chat** (history over HTTP, realtime over WS)
+- ✅ **Message status ticks**: `sent → delivered → seen` (live)
+- 👀 **Seen receipts** (room open → ✓✓ blue)
+- 📶 **Presence** with Redis TTL (online / last seen)
+- ✍️ **Typing indicator** (debounced)
+- 📥 **Inbox list** with **last message + unread badge** (live via `/ws/inbox/`)
+- ⚡ **Django Channels + Redis** for scaling
+- 🎨 **Modern UI** (TailwindCSS)
+- 🐳 **Docker Compose** option
 
 ---
 
 ## 🛠 Tech Stack
 
-**Frontend:**
-- React (Vite)
-- TypeScript
-- TailwindCSS
-- WebSocket API
-
-**Backend:**
-- Django
-- Django REST Framework (DRF)
-- Django Channels
-- Redis (for channel layer)
-
-**Deployment:**
-- Docker & Docker Compose
+**Frontend:** React (Vite), TypeScript, Axios, React Router, TailwindCSS, WebSocket API  
+**Backend:** Django, DRF, Django Channels, Redis (channel layer), SimpleJWT
 
 ---
 
@@ -41,117 +32,161 @@ Supports **one-to-one messaging**, **real-time updates** via WebSockets, and a c
 
 ```
 backend/
- ├── accounts/       # Authentication app
- ├── chat/           # Chat logic & WebSocket consumers
- ├── core/           # Project settings & configs
- ├── myapp/          # Other reusable apps
+ ├── accounts/              # Auth API (APIView): register/login/me/refresh
+ ├── chat/                  # Messages, presence, consumers & routing
+ │   ├── models.py          # Message model + indexes
+ │   ├── views.py           # Users list (threads), conversation history, presence API
+ │   ├── routing.py         # websocket_urlpatterns
+ │   ├── consumers.py       # ChatConsumer (room)
+ │   ├── consumers_inbox.py # InboxConsumer + PresenceConsumer
+ │   ├── presence.py        # Redis presence helpers (TTL + last_seen)
+ ├── core/                  # Settings (dev/prod)
  ├── manage.py
- ├── requirements.txt
- └── Dockerfile
+ └── requirements.txt
 
 frontend/
- ├── public/
- ├── src/            # React components & pages
- ├── package.json
+ ├── src/
+ │   ├── api.ts             # Axios client with JWT + refresh
+ │   ├── pages/
+ │   │   ├── Chat.tsx       # Sidebar (inbox) + search (live updates)
+ │   │   └── Room.tsx       # WhatsApp-like room UI (ticks/typing)
+ │   ├── presence.ts        # Presence ping helper
+ │   └── types.ts           # TS types (Message, ThreadItem, etc.)
  ├── vite.config.ts
- └── tsconfig.json
+ └── package.json
 ```
 
 ---
 
-## 🚀 Installation & Setup
+## 🚀 Quick Start
 
-### 1️⃣ Clone the Repository
+### 1) Clone
 ```bash
 git clone https://github.com/shadikhasan/Chat-App---React-and-Django-.git
 cd Chat-App---React-and-Django-
 ```
 
----
-
-### 2️⃣ Backend Setup (Django)
+### 2) Backend
 ```bash
 cd backend
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
+python -m venv venv && source venv/bin/activate   # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Apply migrations
-python manage.py migrate
+# Env (example)
+export REDIS_URL=redis://127.0.0.1:6379/0
+export DJANGO_SETTINGS_MODULE=core.settings.dev
 
-# Create superuser
+python manage.py migrate
 python manage.py createsuperuser
 
-# Start Redis (Required for Channels)
-redis-server
-
-# Run backend server
+# Start Redis (or use Docker)
+redis-server &
 python manage.py runserver
 ```
 
----
-
-### 3️⃣ Frontend Setup (React + Vite)
+### 3) Frontend
 ```bash
-cd frontend
+cd ../frontend
+npm i
 
-# Install dependencies
-npm install
-
-# Start frontend dev server
+# .env (example)
+# VITE_API_BASE=/api                  # when vite proxy maps to backend
+# VITE_WS_BASE=ws://localhost:8000    # direct to backend websockets
 npm run dev
 ```
 
+> If you don’t proxy API/WS in Vite, set `VITE_API_BASE=http://localhost:8000/api` and `VITE_WS_BASE=ws://localhost:8000`.
+
 ---
 
-### 4️⃣ Running with Docker (Optional)
+## 🔌 APIs & WebSockets
+
+### REST (key endpoints)
+| Method | Path                      | Purpose                             | Auth |
+|-------:|---------------------------|-------------------------------------|------|
+| POST   | `/api/auth/register/`     | Register                            | no   |
+| POST   | `/api/auth/login/`        | Login (JWT)                         | no   |
+| POST   | `/api/auth/refresh/`      | Refresh access                      | no   |
+| GET    | `/api/auth/me/`           | Current user                        | JWT  |
+| GET    | `/api/chat/users/`        | **Threads list** (last msg + unread)| JWT  |
+| GET    | `/api/chat/history/:u/`   | Conversation history with `:u`      | JWT  |
+| GET    | `/api/chat/presence/:u/`  | Presence `{ online, last_seen }`    | JWT  |
+
+### WebSockets
+- **Room**: `ws://HOST/ws/chat/:username/?token=<ACCESS_JWT>`  
+  Events:
+  - Client → Server:
+    - `{type:"message.send", text:string}`
+    - `{type:"typing.start"}` / `{type:"typing.stop"}`
+    - `{type:"receipt.delivered", message_id:number}`
+    - `{type:"receipt.seen_all"}`
+  - Server → Client:
+    - `{type:"message.new", message}`
+    - `{type:"receipt.update", message_id, status, ts}`
+    - `{type:"receipt.bulk_seen", items:[{id, ts}] }`
+    - `{type:"typing", from, active}`
+
+- **Presence**: `ws://HOST/ws/presence/?token=<ACCESS_JWT>`  
+  - On connect: marks user **online**, auto‑delivers pending **sent → delivered**, and broadcasts updates to the sender’s **room** and **inbox**.
+  - Client should send `{type:"ping"}` periodically (e.g., every 25s) to keep TTL fresh.
+
+- **Inbox**: `ws://HOST/ws/inbox/?token=<ACCESS_JWT>`  
+  - Server → Client: `{type:"thread.update", user, unread_count, last_message}`  
+  - Drives **live sidebar** updates (last message text, unread badge, and ticks).
+
+---
+
+## ✅ Message Status (Ticks)
+
+- **`sent`** → single gray ✓ (message stored)
+- **`delivered`** → double gray ✓✓ (recipient online anywhere)
+- **`seen`** → double blue ✓✓ (recipient opened the room)
+
+All tick changes update **in the room and in the inbox list** in real time.
+
+---
+
+## 🧠 Presence
+
+- Backed by Redis keys (TTL ~60s) + `last_seen` timestamp.
+- Title bar shows **online** or **last seen …** using `/api/chat/presence/:username/`.
+- The client pings the presence WS every ~25s: `{type:"ping"}`.
+
+---
+
+## 🧩 Environment Variables (Backend)
+
+- `REDIS_URL` — e.g. `redis://127.0.0.1:6379/0`
+- `DJANGO_SETTINGS_MODULE` — e.g. `core.settings.dev`
+- `SECRET_KEY`, `ALLOWED_HOSTS`, `CORS_ORIGINS` (set for production)
+
+---
+
+## 🐳 Docker (Optional)
 ```bash
 docker-compose up --build
 ```
-This will start **backend**, **frontend**, and **Redis** together.
+Brings up **backend**, **frontend**, and **Redis**.
 
 ---
 
-## 🔌 WebSocket URL Format
+## 🔒 Notes
 
-```
-ws://<backend-host>/ws/chat/<username>/?token=<JWT_ACCESS_TOKEN>
-```
-
-Example:
-```
-ws://localhost:8000/ws/chat/john/?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUz...
-```
+- JWT is passed in the **Authorization** header for REST and as `?token=` for WS.
+- Avoid logging WS URLs with tokens in production.
+- Prefer Postgres in production; tune Redis & Channels.
 
 ---
 
 ## 📸 Screenshots
-
-*(Add some screenshots of the chat interface here)*
-
----
-
-## 🗒 Notes
-
-- Default database is **SQLite** for quick setup — change `DATABASES` in `backend/core/settings.py` for production.
-- Use **Redis** in production for WebSocket handling.
-- Environment variables should be stored in `.env` files (both backend & frontend).
+_Add screenshots of the inbox and room UI here._
 
 ---
 
 ## 📜 License
-
-This project is licensed under the MIT License — feel free to use and modify.
+MIT
 
 ---
 
 ## 👨‍💻 Author
-
-**Shadik Hasan**  
-🐙 [GitHub Profile](https://github.com/shadikhasan)
-
----
+**Shadik Hasan** — 🐙 [GitHub](https://github.com/shadikhasan)
