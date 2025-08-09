@@ -6,12 +6,21 @@ import Login from './pages/Login'
 import Register from './pages/Register'
 import Chat from './pages/Chat'
 import './index.css'
+import { startPresence, stopPresence } from './presence'
 
 // Tiny auth gate: pass the element you want to protect
 function RequireAuth(el: JSX.Element) {
   const has = !!localStorage.getItem('access')
   return has ? el : <Navigate to="/login" replace />
 }
+
+function bootPresence() {
+  // start presence when app loads and user has a token
+  if (localStorage.getItem('access')) startPresence()
+  // stop on unload
+  window.addEventListener('beforeunload', () => stopPresence())
+}
+bootPresence()
 
 const router = createBrowserRouter(
   [

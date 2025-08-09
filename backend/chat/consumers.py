@@ -1,10 +1,26 @@
 import json
+from typing import Any, Dict
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser, User
 from channels.db import database_sync_to_async
+from django.utils import timezone
 from .models import Message
+from .presence import is_online
 
 class ChatConsumer(AsyncWebsocketConsumer):
+    """
+    Client -> Server:
+      - {"type":"message.send","text":"hi"}
+      - {"type":"receipt.delivered","message_id":123}   # (kept, but usually auto by presence)
+      - {"type":"receipt.seen_all"}                     # when room is open/visible
+      - {"type":"typing.start"} / {"type":"typing.stop"}
+
+    Server -> Client:
+      - {"type":"message.new", "message": {...}}
+      - {"type":"receipt.update","message_id":123,"status":"delivered"|"seen","ts":"..."}
+      - {"type":"receipt.bulk_seen","items":[{"id":..,"ts":"..."}]}
+      - {"type":"typing","from":"username","active":true|false}
+    """
     async def connect(self):
         user = self.scope.get("user")
         if not user or isinstance(user, AnonymousUser) or not user.is_authenticated:
@@ -19,28 +35,115 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_discard(self.room_name, self.channel_name)
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
-        text = data.get("text", "").strip()
-        if not text: return
-        msg = await self._save_message(self.me.username, self.peer_username, text)
-        await self.channel_layer.group_send(self.room_name, {"type": "chat.message", "message": msg})
+        try:
+            data = json.loads(text_data)
+        except Exception:
+            return
+        evt = data.get("type")
 
-    async def chat_message(self, event):
-        await self.send(text_data=json.dumps(event["message"]))
+        if evt == "message.send":
+            text = (data.get("text") or "").strip()
+            if not text: return
+            # 1) create message as 'sent'
+            msg = await self._create_message(self.me.username, self.peer_username, text)
+            # 2) broadcast message.new (status: sent)
+            await self.channel_layer.group_send(self.room_name, {"type": "chat.message_new", "message": msg})
+            # 3) if receiver is online anywhere, mark delivered and broadcast receipt.update
+            if await database_sync_to_async(is_online)(self.peer_username):
+                upd = await self._mark_delivered(msg["id"])
+                if upd:
+                    await self.channel_layer.group_send(
+                        self.room_name,
+                        {"type": "chat.receipt_update", "message_id": msg["id"], "status": "delivered", "ts": upd["ts"]},
+                    )
+            return
 
+        if evt == "receipt.delivered":
+            # optional manual ack path
+            mid = data.get("message_id")
+            if isinstance(mid, int):
+                upd = await self._mark_delivered(mid)
+                if upd:
+                    await self.channel_layer.group_send(
+                        self.room_name,
+                        {"type": "chat.receipt_update", "message_id": mid, "status": "delivered", "ts": upd["ts"]},
+                    )
+            return
+
+        if evt == "receipt.seen_all":
+            ids_ts = await self._mark_all_seen(self.me.username, self.peer_username)
+            if ids_ts:
+                await self.channel_layer.group_send(self.room_name, {"type": "chat.receipt_bulk_seen", "items": ids_ts})
+            return
+
+        if evt == "typing.start":
+            await self.channel_layer.group_send(self.room_name, {"type": "chat.typing", "from": self.me.username, "active": True})
+            return
+        if evt == "typing.stop":
+            await self.channel_layer.group_send(self.room_name, {"type": "chat.typing", "from": self.me.username, "active": False})
+            return
+
+    # ==== Group handlers ====
+    async def chat_message_new(self, event):
+        await self.send(text_data=json.dumps({"type": "message.new", "message": event["message"]}))
+
+    async def chat_receipt_update(self, event):
+        await self.send(text_data=json.dumps({
+            "type": "receipt.update",
+            "message_id": event["message_id"],
+            "status": event["status"],
+            "ts": event["ts"],
+        }))
+
+    async def chat_receipt_bulk_seen(self, event):
+        await self.send(text_data=json.dumps({"type": "receipt.bulk_seen", "items": event["items"]}))
+
+    async def chat_typing(self, event):
+        if event.get("from") == self.me.username: return
+        await self.send(text_data=json.dumps({"type": "typing", "from": event["from"], "active": event["active"]}))
+
+    # ==== Helpers ====
     @staticmethod
-    def _room(a, b):
-        return "chat_" + "__".join(sorted([a, b]))
+    def _room(a, b): return "chat_" + "__".join(sorted([a, b]))
 
     @database_sync_to_async
-    def _save_message(self, sender, receiver, text):
+    def _create_message(self, sender, receiver, text) -> Dict[str, Any]:
         s = User.objects.get(username=sender)
         r = User.objects.get(username=receiver)
-        m = Message.objects.create(sender=s, receiver=r, text=text)
+        m = Message.objects.create(sender=s, receiver=r, text=text)  # status=sent
         return {
-            "id": m.id,
-            "text": m.text,
-            "created_at": m.created_at.isoformat(),
+            "id": m.id, "text": m.text, "created_at": m.created_at.isoformat(), "status": m.status,
+            "delivered_at": m.delivered_at.isoformat() if m.delivered_at else None,
+            "seen_at": m.seen_at.isoformat() if m.seen_at else None,
             "sender": {"id": s.id, "username": s.username},
             "receiver": {"id": r.id, "username": r.username},
         }
+
+    @database_sync_to_async
+    def _mark_delivered(self, message_id: int):
+        try:
+            msg = Message.objects.get(id=message_id)
+        except Message.DoesNotExist:
+            return None
+        if msg.status == Message.STATUS_SENT:
+            msg.status = Message.STATUS_DELIVERED
+            msg.delivered_at = timezone.now()
+            msg.save(update_fields=["status", "delivered_at"])
+        return {"ts": msg.delivered_at.isoformat() if msg.delivered_at else None}
+
+    @database_sync_to_async
+    def _mark_all_seen(self, me: str, peer: str):
+        now = timezone.now()
+        qs = Message.objects.select_for_update().filter(
+            sender__username=peer, receiver__username=me
+        ).exclude(status=Message.STATUS_SEEN)
+        changed = []
+        for msg in qs:
+            msg.status = Message.STATUS_SEEN
+            msg.seen_at = now
+            msg.is_read = True
+            if not msg.delivered_at:
+                msg.delivered_at = now
+            msg.save(update_fields=["status", "seen_at", "is_read", "delivered_at"])
+            changed.append({"id": msg.id, "ts": msg.seen_at.isoformat()})
+        return changed

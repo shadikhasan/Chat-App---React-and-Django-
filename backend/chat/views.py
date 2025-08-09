@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Message
+from .presence import get_presence
 from .serializers import MessageSerializer, UserPublicSerializer
 
 class UsersListView(APIView):
@@ -24,3 +25,9 @@ class ConversationView(APIView):
             Q(sender=request.user, receiver=other) | Q(sender=other, receiver=request.user)
         ).order_by("created_at")
         return Response(MessageSerializer(qs, many=True).data)
+
+
+class UserPresenceView(APIView):
+    permission_classes = [IsAuthenticated]
+    def get(self, request, username):
+        return Response(get_presence(username))

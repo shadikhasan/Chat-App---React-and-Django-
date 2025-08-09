@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import type { Me } from "../types";
-import { startPresence } from "./../presence";
 
 type TokenPair = { access: string; refresh: string; user?: any };
 
@@ -45,8 +44,7 @@ export default function Login() {
 
   function prettifyMessage(msg: string) {
     const map: Record<string, string> = {
-      "No active account found with the given credentials.":
-        "Invalid username or password.",
+      "No active account found with the given credentials.": "Invalid username or password.",
       "This field may not be blank.": "This field is required.",
     };
     return map[msg] || msg;
@@ -104,14 +102,10 @@ export default function Login() {
 
     setSubmitting(true);
     try {
-      const { data } = await api.post<TokenPair>("/auth/login/", {
-        username,
-        password,
-      });
+      const { data } = await api.post<TokenPair>("/auth/login/", { username, password });
       localStorage.setItem("access", data.access);
       localStorage.setItem("refresh", data.refresh);
       if (data.user) localStorage.setItem("me", JSON.stringify(data.user));
-      startPresence();
       window.location.href = "/";
     } catch (err: any) {
       parseApiErrors(err);
@@ -125,12 +119,8 @@ export default function Login() {
       {/* Left Panel */}
       <div className="flex flex-col justify-center w-full md:w-1/2 px-6 lg:px-12 bg-gray-50">
         <div className="max-w-md w-full mx-auto bg-white shadow-lg rounded-2xl p-8">
-          <h1 className="text-3xl font-bold text-center text-gray-900 mb-2">
-            Welcome back
-          </h1>
-          <p className="text-center text-gray-500 mb-6">
-            Sign in to continue your conversation
-          </p>
+          <h1 className="text-3xl font-bold text-center text-gray-900 mb-2">Welcome back</h1>
+          <p className="text-center text-gray-500 mb-6">Sign in to continue your conversation</p>
 
           {/* Global Error */}
           {apiError && (
@@ -138,19 +128,8 @@ export default function Login() {
               className="mb-4 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-red-700 text-sm animate-fadeIn"
               role="alert"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-5 w-5 flex-shrink-0 mt-0.5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01M4.93 4.93l14.14 14.14"
-                />
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M4.93 4.93l14.14 14.14" />
               </svg>
               <span>{apiError}</span>
             </div>
@@ -159,10 +138,7 @@ export default function Login() {
           <form onSubmit={submit} className="space-y-4">
             {/* Username */}
             <div>
-              <label
-                htmlFor="username"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
                 Username
               </label>
               <input
@@ -178,15 +154,10 @@ export default function Login() {
                     : "border-gray-300 focus:ring-2 focus:ring-[#075E54]",
                 ].join(" ")}
                 aria-invalid={!!fieldErrors.username}
-                aria-describedby={
-                  fieldErrors.username ? "username-error" : undefined
-                }
+                aria-describedby={fieldErrors.username ? "username-error" : undefined}
               />
               {fieldErrors.username && (
-                <p
-                  id="username-error"
-                  className="mt-1 text-xs text-red-600 animate-fadeIn"
-                >
+                <p id="username-error" className="mt-1 text-xs text-red-600 animate-fadeIn">
                   {fieldErrors.username}
                 </p>
               )}
@@ -194,10 +165,7 @@ export default function Login() {
 
             {/* Password */}
             <div>
-              <label
-                htmlFor="password"
-                className="block text-sm font-medium text-gray-700"
-              >
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 Password
               </label>
               <div className="mt-1 relative">
@@ -208,11 +176,7 @@ export default function Login() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setP(e.target.value)}
-                  onKeyUp={(e) =>
-                    setCapsOn(
-                      e.getModifierState && e.getModifierState("CapsLock")
-                    )
-                  }
+                  onKeyUp={(e) => setCapsOn(e.getModifierState && e.getModifierState("CapsLock"))}
                   className={[
                     "w-full px-4 py-2 text-sm rounded-md border bg-gray-50 outline-none pr-10",
                     fieldErrors.password
@@ -234,14 +198,9 @@ export default function Login() {
                 </button>
               </div>
               {(fieldErrors.password || capsOn) && (
-                <div
-                  id="password-help"
-                  className="mt-1 space-y-1 animate-fadeIn"
-                >
+                <div id="password-help" className="mt-1 space-y-1 animate-fadeIn">
                   {fieldErrors.password && (
-                    <p className="text-xs text-red-600">
-                      {fieldErrors.password}
-                    </p>
+                    <p className="text-xs text-red-600">{fieldErrors.password}</p>
                   )}
                   {capsOn && (
                     <p className="text-xs text-amber-600">Caps Lock is ON.</p>
@@ -256,9 +215,7 @@ export default function Login() {
               disabled={submitting}
               className={[
                 "w-full py-2 text-sm font-medium text-white rounded-md transition flex items-center justify-center",
-                submitting
-                  ? "bg-[#0b7d6e]/70 cursor-not-allowed"
-                  : "bg-[#075E54] hover:bg-[#0b7d6e]",
+                submitting ? "bg-[#0b7d6e]/70 cursor-not-allowed" : "bg-[#075E54] hover:bg-[#0b7d6e]",
               ].join(" ")}
             >
               {submitting ? (
@@ -269,19 +226,8 @@ export default function Login() {
                     fill="none"
                     viewBox="0 0 24 24"
                   >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                    />
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"/>
                   </svg>
                   Signing in…
                 </span>
@@ -292,10 +238,7 @@ export default function Login() {
           </form>
 
           <div className="mt-4 flex items-center justify-between text-sm">
-            <a
-              href="/forgot-password"
-              className="text-[#075E54] hover:underline"
-            >
+            <a href="/forgot-password" className="text-[#075E54] hover:underline">
               Forgot password?
             </a>
             <a href="/register" className="text-[#075E54] hover:underline">
