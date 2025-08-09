@@ -152,7 +152,6 @@ This project is licensed under the MIT License — feel free to use and modify.
 ## 👨‍💻 Author
 
 **Shadik Hasan**  
-📧 [Email me](mailto:your-email@example.com)  
 🐙 [GitHub Profile](https://github.com/shadikhasan)
 
 ---
