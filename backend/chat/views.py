@@ -1,14 +1,15 @@
 from django.contrib.auth.models import User
-from django.db.models import Q
 from django.db.models import Q, Count, OuterRef, Subquery, DateTimeField
-from rest_framework.views import APIView
 from django.db.models.functions import Coalesce
+from rest_framework.views import APIView
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
+
 from .models import Message
 from .presence import get_presence
 from .serializers import MessageSerializer, UserPublicSerializer
+
 
 class UsersListView(APIView):
     """

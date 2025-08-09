@@ -1,6 +1,7 @@
 # chat/consumers.py  (replace file if easier)
 import json
 from typing import Any, Dict
+from django.db import transaction
 from channels.generic.websocket import AsyncWebsocketConsumer
 from django.contrib.auth.models import AnonymousUser, User
 from channels.db import database_sync_to_async
@@ -132,19 +133,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
     @database_sync_to_async
     def _mark_all_seen(self, me: str, peer: str):
         now = timezone.now()
-        qs = Message.objects.select_for_update().filter(
-            sender__username=peer, receiver__username=me
-        ).exclude(status=Message.STATUS_SEEN)
-        changed = []
-        for msg in qs:
-            msg.status = Message.STATUS_SEEN
-            msg.seen_at = now
-            msg.is_read = True
-            if not msg.delivered_at:
-                msg.delivered_at = now
-            msg.save(update_fields=["status", "seen_at", "is_read", "delivered_at"])
-            changed.append({"id": msg.id, "ts": msg.seen_at.isoformat()})
-        return changed
+        with transaction.atomic():
+            qs = Message.objects.select_for_update().filter(
+                sender__username=peer, receiver__username=me
+            ).exclude(status=Message.STATUS_SEEN)
+            changed = []
+            for msg in qs:
+                msg.status = Message.STATUS_SEEN
+                msg.seen_at = now
+                msg.is_read = True
+                if not msg.delivered_at:
+                    msg.delivered_at = now
+                msg.save(update_fields=["status", "seen_at", "is_read", "delivered_at"])
+                changed.append({"id": msg.id, "ts": msg.seen_at.isoformat()})
+            return changed
 
     @database_sync_to_async
     def _thread_summary(self, me_username: str, other_username: str):

@@ -34,4 +34,8 @@ def get_last_seen(username: str) -> Optional[str]:
     return _r.get(KEY_LAST.format(username))
 
 def get_presence(username: str) -> dict:
-    return {"online": is_online(username), "last_seen": get_last_seen(username)}
+    return {
+        "online": is_online(username),
+        "last_seen": get_last_seen(username),
+        "ttl": PRESENCE_TTL_SEC,  # optional
+    }
